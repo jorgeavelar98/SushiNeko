@@ -9,31 +9,35 @@
 import SpriteKit
 
 /* Tracking enum for use with character and sushi side */
+enum Side {
+    case Left, Right, None
+}
 
 /* Tracking enum for game state */
 enum GameState {
     case Title, Ready, Playing, GameOver
 }
 
-enum Side {
-    case Left, Right, None
-}
-
-
 class GameScene: SKScene {
+    
     /* Game objects */
-    var sushiBasePiece: SushiPiece!
     var character: Character!
-    /* Sushi tower array */
-    var sushiTower: [SushiPiece] = []
-    /* Game management */
-    var state: GameState = .Title
+    var sushiBasePiece: SushiPiece!
     var playButton: MSButtonNode!
     var healthBar: SKSpriteNode!
     var scoreLabel: SKLabelNode!
     
+    /* Sushi tower array */
+    var sushiTower: [SushiPiece] = []
+    
+    /* Game management */
+    var state: GameState = .Title
+    
     var health: CGFloat = 1.0 {
         didSet {
+            /* Cap Health */
+            if health > 1.0 { health = 1.0 }
+            
             /* Scale health bar between 0.0 -> 1.0 e.g 0 -> 100% */
             healthBar.xScale = health
         }
@@ -42,6 +46,101 @@ class GameScene: SKScene {
     var score: Int = 0 {
         didSet {
             scoreLabel.text = String(score)
+        }
+    }
+    
+    override func didMoveToView(view: SKView) {
+        /* Setup your scene here */
+        
+        /* Connect game objects */
+        character = childNodeWithName("character") as! Character
+        sushiBasePiece = childNodeWithName("sushiBasePiece") as! SushiPiece
+        
+        /* UI game objects */
+        playButton = childNodeWithName("playButton") as! MSButtonNode
+        healthBar = childNodeWithName("healthBar") as! SKSpriteNode
+        scoreLabel = childNodeWithName("scoreLabel") as! SKLabelNode
+        
+        /* Setup play button selection handler */
+        playButton.selectedHandler = {
+            
+            /* Start game */
+            self.state = .Ready
+        }
+        
+        /* Setup chopstick connections */
+        sushiBasePiece.connectChopsticks()
+        
+        /* Manually stack the start of the tower */
+        addTowerPiece(.None)
+        addTowerPiece(.Right)
+        
+        /* Randomize tower to just outside of the screen */
+        addRandomPieces(10)
+    }
+    
+    override func touchesBegan(touches: Set<UITouch>, withEvent event: UIEvent?) {
+        /* Called when a touch begins */
+        
+        /* Game not ready to play */
+        if state == .GameOver || state == .Title { return }
+        
+        /* Game begins on first touch */
+        if state == .Ready {
+            state = .Playing
+        }
+        
+        for touch in touches {
+            
+            /* Get touch position in scene */
+            let location = touch.locationInNode(self)
+            
+            /* Was touch on left/right hand side of screen? */
+            if location.x > size.width / 2 {
+                character.side = .Right
+            } else {
+                character.side = .Left
+            }
+            
+            /* Grab sushi piece on top of the base sushi piece, it will always be 'first' */
+            let firstPiece = sushiTower.first as SushiPiece!
+            
+            /* Check character side against sushi piece side (this is our death collision check)*/
+            if character.side == firstPiece.side {
+                
+                /* Drop all the sushi pieces down a place (visually) */
+                for node:SushiPiece in sushiTower {
+                    node.runAction(SKAction.moveBy(CGVector(dx: 0, dy: -55), duration: 0.10))
+                }
+                
+                gameOver()
+                
+                /* No need to continue as player dead */
+                return
+            }
+            
+            /* Increment Health */
+            health += 0.1
+            
+            /* Increment Score */
+            score += 1
+            
+            /* Remove from sushi tower array */
+            sushiTower.removeFirst()
+            
+            /* Animate the punched sushi piece */
+            firstPiece.flip(character.side)
+            
+            /* Add a new sushi piece to the top of the sushi tower */
+            addRandomPieces(1)
+            
+            /* Drop all the sushi pieces down one place */
+            for node:SushiPiece in sushiTower {
+                node.runAction(SKAction.moveBy(CGVector(dx: 0, dy: -55), duration: 0.10))
+                
+                /* Reduce zPosition to stop zPosition climbing over UI */
+                node.zPosition--
+            }
         }
     }
     
@@ -62,8 +161,6 @@ class GameScene: SKScene {
         /* Increment Z to ensure it's on top of the last piece, default on first piece*/
         let lastZPosition = lastPiece?.zPosition ?? sushiBasePiece.zPosition
         newPiece.zPosition = lastZPosition + 1
-        
-        
         
         /* Set side */
         newPiece.side = side
@@ -121,7 +218,7 @@ class GameScene: SKScene {
         /* Change play button selection handler */
         playButton.selectedHandler = {
             
-            /* Grab reference to the SpriteKit view */
+            /* Grab reference to our SpriteKit view */
             let skView = self.view as SKView!
             
             /* Load Game scene */
@@ -135,110 +232,6 @@ class GameScene: SKScene {
         }
     }
     
-    override func didMoveToView(view: SKView) {
-        /* Setup your scene here */
-        
-        
-        
-        /* Connect game objects */
-        sushiBasePiece = childNodeWithName("sushiBasePiece") as! SushiPiece
-        
-        character = childNodeWithName("character") as! Character
-        
-        /* UI game objects */
-        playButton = childNodeWithName("playButton") as! MSButtonNode
-        
-        healthBar = childNodeWithName("healthBar") as! SKSpriteNode
-        
-        scoreLabel = childNodeWithName("scoreLabel") as! SKLabelNode
-        
-        
-        /* Setup chopstick connections */
-        sushiBasePiece.connectChopsticks()
-        
-        /* Manually stack the start of the tower */
-        addTowerPiece(.None)
-        addTowerPiece(.Right)
-        
-        /* Randomize tower to just outside of the screen */
-        addRandomPieces(10)
-        
-        /* Setup play button selection handler */
-        playButton.selectedHandler = {
-            
-            /* Start game */
-            self.state = .Ready
-        }
-
-    }
-    
-    override func touchesBegan(touches: Set<UITouch>, withEvent event: UIEvent?) {
-        /* Called when a touch begins */
-        
-        /* Increment Health */
-        health += 0.1
-        
-        /* Increment Score */
-        score += 1
-
-        
-        /* Cap Health */
-        if health > 1.0 { health = 1.0 }
-
-        
-        /* Game not ready to play */
-        if state == .GameOver || state == .Title { return }
-        
-        /* Game begins on first touch */
-        if state == .Ready {
-            state = .Playing
-        }
-        
-        for touch in touches {
-            /* Get touch position in scene */
-            let location = touch.locationInNode(self)
-            
-            /* Was touch on left/right hand side of screen? */
-            if location.x > size.width / 2 {
-                character.side = .Right
-            } else {
-                character.side = .Left
-            }
-            
-            /* Grab sushi piece on top of the base sushi piece, it will always be 'first' */
-            let firstPiece = sushiTower.first as SushiPiece!
-            
-            /* Check character side against sushi piece side (this is the death collision check)*/
-            if character.side == firstPiece.side {
-                
-                /* Drop all the sushi pieces down a place (visually) */
-                for node:SushiPiece in sushiTower {
-                    node.runAction(SKAction.moveBy(CGVector(dx: 0, dy: -55), duration: 0.10))
-                }
-                
-                gameOver()
-                
-                /* No need to continue as player dead */
-                return
-            }
-
-            /* Remove from sushi tower array */
-            sushiTower.removeFirst()
-            /* Animate the punched sushi piece */
-            firstPiece.flip(character.side)
-            
-            /* Add a new sushi piece to the top of the sushi tower */
-            addRandomPieces(1)
-            
-            }
-        /* Drop all the sushi pieces down one place */
-        for node:SushiPiece in sushiTower {
-            node.runAction(SKAction.moveBy(CGVector(dx: 0, dy: -55), duration: 0.10))
-            
-            /* Reduce zPosition to stop zPosition climbing over UI */
-            node.zPosition -= 1
-        }
-    }
     override func update(currentTime: CFTimeInterval) {
         /* Called before each frame is rendered */
         if state != .Playing { return }
@@ -246,8 +239,8 @@ class GameScene: SKScene {
         /* Decrease Health */
         health -= 0.01
         
-        /* Has the player run out of health? */
+        /* Has the player ran out of health? */
         if health < 0 { gameOver() }
     }
-
+    
 }
